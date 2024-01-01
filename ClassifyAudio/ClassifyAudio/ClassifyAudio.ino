@@ -27,6 +27,17 @@
 #include "libs/tensorflow/classification.h"
 #include "third_party/tflite-micro/tensorflow/lite/experimental/microfrontend/lib/frontend.h"
 
+// From Blink without Delay.
+// constants won't change. Used here to set a pin number:
+const int ledPin = LED_BUILTIN;  // the number of the LED pin
+
+// Variables will change:
+int ledState = LOW;  // ledState used to set the LED
+
+// Generally, you should use "unsigned long" for variables that hold time
+// The value will quickly become too large for an int to store
+unsigned long blink_until = 0;  // timestamp longer to blink (milliseconds)
+
 namespace {
 bool setup_success{false};
 
@@ -45,13 +56,16 @@ FrontendState frontend_state{};
 constexpr float kThreshold = 0.3;
 constexpr int kTopK = 5;
 
-constexpr char kModelName[] = "/models/yamnet_spectra_in_edgetpu.tflite";
+constexpr char kModelName[] = "/yamnet_spectra_in_edgetpu.tflite";
 }  // namespace
 
 void setup() {
   Serial.begin(115200);
+  //delay(5000);  // Add delay to print if setup doesn't work.
   // Turn on Status LED to show the board is on.
   pinMode(PIN_LED_STATUS, OUTPUT);
+  pinMode(ledPin, OUTPUT);  // Blink without delay.
+  digitalWrite(ledPin, LOW);
   digitalWrite(PIN_LED_STATUS, HIGH);
   Serial.println("Arduino YamNet!");
 
@@ -63,6 +77,9 @@ void setup() {
   resolver = coralmicro::tensorflow::SetupYamNetResolver</*tForTpu=*/true>();
 
   Serial.println("Loading Model");
+
+  // Debug for if setup doesnt work.
+  printDirectoryTree();
 
   if (!SD.exists(kModelName)) {
     Serial.println("Model file not found");
@@ -103,8 +120,19 @@ void setup() {
 
 void loop() {
   if (!setup_success) {
-    Serial.println("Cannot invoke because of a problem during setup!");
+    //Serial.println("Cannot invoke because of a problem during setup!");
     return;
+  }
+
+  unsigned long currentMillis = millis();
+  if (blink_until > currentMillis) {
+    if (digitalRead(ledPin) == false) {
+      digitalWrite(ledPin, HIGH);
+    }
+  } else {
+    if (digitalRead(ledPin) == true) {
+      digitalWrite(ledPin, LOW);
+    }
   }
 
   if (Mic.available() < coralmicro::tensorflow::kYamnetAudioSize) {
@@ -135,6 +163,40 @@ void loop() {
       Serial.print(c.id);
       Serial.print(": ");
       Serial.println(c.score);
+
+      // Blink if Meow or Cat.
+      if (c.id==78 || c.id==76 ) {
+        blink_until = currentMillis + 1000;
+      }
     }
+  }
+}
+
+void printDirectoryTree() {
+  Serial.println("Current directory tree");
+  SDFile dir = SD.open("/");
+  printDirectory(dir, 0);
+  dir.close();
+}
+
+void printDirectory(SDFile dir, int numTabs) {
+  // Prints a directory and all its subdirs
+  while (true) {
+    SDFile entry = dir.openNextFile();
+    if (!entry) {
+      break;
+    }
+    for (uint8_t i = 0; i < numTabs; i++) {
+      Serial.print('\t');
+    }
+    Serial.print(entry.name());
+    if (entry.isDirectory()) {
+      Serial.println("/");
+      printDirectory(entry, numTabs + 1);
+    } else {
+      Serial.print("\t\t");
+      Serial.println(entry.size());
+    }
+    entry.close();
   }
 }
