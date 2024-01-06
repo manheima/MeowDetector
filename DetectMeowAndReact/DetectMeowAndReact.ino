@@ -33,9 +33,20 @@ const int ledPin = LED_BUILTIN;  // the number of the LED pin
 
 // Pins for Audio Playback
 const int playbackPin0 = A1;
-//const int playbackPin1 = A0;
-//const int playbackPin2 = D2;
-//const int playbackPin3 = D1;
+const int playbackPin1 = A0;
+const int playbackPin2 = D2;
+const int playbackPin3 = D1;
+const int playbackPins[] = {playbackPin0, playbackPin1, playbackPin2, playbackPin3};
+int currentPinIndex = 0;  // Index of the current pin in the array.
+int arrayLength = sizeof(playbackPins) / sizeof(playbackPins[0]);
+
+
+// Button to change audio playback.
+const int buttonPin = PIN_BTN;  
+bool lastButtonState = LOW;
+bool buttonState = LOW;
+unsigned long lastDebounceTime = 0;
+unsigned long debounceDelay = 50;
 
 // Variables will change:
 int ledState = LOW;  // ledState used to set the LED
@@ -70,19 +81,21 @@ void setup() {
   //delay(5000);  // Add delay to print if setup doesn't work.
   // Turn on Status LED to show the board is on.
   pinMode(PIN_LED_STATUS, OUTPUT);
+  digitalWrite(PIN_LED_STATUS, HIGH);
   pinMode(ledPin, OUTPUT);  // Blink without delay.
   digitalWrite(ledPin, LOW);
-  digitalWrite(PIN_LED_STATUS, HIGH);
+
+  pinMode(buttonPin, INPUT);  // Button to switch audio playback source
   
   // Pin init for audio playback (note that grounding pin turns on audio).
   pinMode(playbackPin0, OUTPUT);
-  //pinMode(playbackPin1, OUTPUT);
-  //pinMode(playbackPin2, OUTPUT);
-  //pinMode(playbackPin3, OUTPUT);
+  pinMode(playbackPin1, OUTPUT);
+  pinMode(playbackPin2, OUTPUT);
+  pinMode(playbackPin3, OUTPUT);
   digitalWrite(playbackPin0, HIGH);
-  //digitalWrite(playbackPin1, HIGH);
-  //digitalWrite(playbackPin2, HIGH);
-  //digitalWrite(playbackPin3, HIGH);
+  digitalWrite(playbackPin1, HIGH);
+  digitalWrite(playbackPin2, HIGH);
+  digitalWrite(playbackPin3, HIGH);
 
   Serial.println("Arduino YamNet!");
 
@@ -145,16 +158,41 @@ void loop() {
   if (blink_until > currentMillis) {
     if (digitalRead(ledPin) == LOW) {
       digitalWrite(ledPin, HIGH);
-      digitalWrite(playbackPin0, LOW);  // Ground pin to play audio.
+      digitalWrite(playbackPins[currentPinIndex], LOW);  // Ground pin to play audio.
     }
   } else {
     // Turn off LED and audio pin.
     if (digitalRead(ledPin) == HIGH) {
       digitalWrite(ledPin, LOW);
       // Don't continue audio playback (otherwise it keeps repeating)
-      digitalWrite(playbackPin0, HIGH);   // HIGH is off.
+      for (int i=0; i<arrayLength; i++) {
+        digitalWrite(playbackPins[i], HIGH);   // HIGH is off.
+      }
     }
   }
+
+  // Button to change audio output.
+  int reading = digitalRead(buttonPin);
+  if (reading != lastButtonState) {
+    // reset the debouncing timer
+    lastDebounceTime = millis();
+  }
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    // whatever the reading is at, it's been there for longer than the debounce
+    // delay, so take it as the actual current state:
+
+    // if the button state has changed:
+    if (reading != buttonState) {
+      buttonState = reading;
+
+      // True button press is here!
+      if (buttonState == HIGH) {
+        currentPinIndex = (currentPinIndex + 1) % 4;
+      }
+    }
+  }
+  // save the reading. Next time through the loop, it'll be the lastButtonState:
+  lastButtonState = reading;
 
   if (Mic.available() < coralmicro::tensorflow::kYamnetAudioSize) {
     return;  // Wait until we have enough data.
